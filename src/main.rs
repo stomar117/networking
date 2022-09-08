@@ -1,4 +1,6 @@
-use etherparse::{IcmpEchoHeader, Icmpv4Slice, Icmpv4Type, PacketBuilder, TcpHeaderSlice};
+mod icmp;
+
+use etherparse::{Icmpv4Slice, TcpHeaderSlice};
 use std::io::Result;
 use tun_tap::Iface;
 
@@ -21,32 +23,7 @@ fn main() -> Result<()> {
                 } else if let Ok(icmph) =
                     Icmpv4Slice::from_slice(&buff[4 + iph.slice().len()..bytes])
                 {
-                    let mut ibuf =
-                        vec![kflags.to_be_bytes().to_vec(), iproto.to_be_bytes().to_vec()]
-                            .into_iter()
-                            .flatten()
-                            .collect::<Vec<u8>>();
-                    if let Icmpv4Type::EchoRequest(req) = icmph.icmp_type() {
-                        match PacketBuilder::ipv4(iph.destination(), iph.source(), 64)
-                            .icmpv4(Icmpv4Type::EchoReply(IcmpEchoHeader {
-                                id: req.id,
-                                seq: req.seq,
-                            }))
-                            .write(&mut ibuf, icmph.payload())
-                        {
-                            Ok(_) => {
-                                println!(
-                                    "header: {:?} len: {}",
-                                    icmph.header(),
-                                    icmph.header_len()
-                                );
-                                nic.send(ibuf.as_slice()).unwrap();
-                            }
-                            Err(e) => {
-                                eprintln!("Error: failed to craft packet: {:?}", e);
-                            }
-                        }
-                    }
+                    icmp::reply(&nic, iph.destination(), iph.source(), icmph, kflags, iproto);
                 } else {
                     println!();
                 }
